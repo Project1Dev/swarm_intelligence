@@ -1,0 +1,87 @@
+# Ollama Model Configuration for Swarm Intelligence System
+
+# Ollama endpoint configuration
+endpoint:
+  host: "192.168.254.17"
+  port: 11434
+  base_url: "http://192.168.254.17:11434"
+
+# Model specifications
+models:
+  # Leader Agent - Strategic planning and orchestration
+  phi3-mini:
+    name: "phi3:mini"
+    size: "3.8B"
+    role: "leader"
+    device: "gpu"
+    timeout: 30
+    temperature: 0.4
+    max_tokens: 1000
+
+  # Code Specialist - Algorithm implementation
+  deepseek-coder:
+    name: "deepseek-coder:1.3b"
+    size: "1.3B"
+    role: "code_specialist"
+    device: "gpu"
+    timeout: 20
+    temperature: 0.1
+    max_tokens: 2000
+
+  # Logic Checker - Validation and verification
+  qwen-1.5b:
+    name: "qwen2.5:1.5b"
+    size: "1.5B"
+    role: "logic_checker"
+    device: "gpu"
+    timeout: 20
+    temperature: 0.0
+    max_tokens: 1500
+
+  # Blackboard Memory Manager (using smallest available model)
+  qwen-7b:
+    name: "qwen2.5:7b"
+    size: "7B"
+    role: "blackboard_manager"
+    device: "cpu"
+    timeout: 15
+    temperature: 0.2
+    max_tokens: 500
+
+  # Retrieval Specialist - Knowledge search
+  tinyllama:
+    name: "tinyllama:1.1b"
+    size: "1.1B"
+    role: "retrieval_specialist"
+    device: "cpu"
+    timeout: 10
+    temperature: 0.2
+    max_tokens: 800
+
+# Retry configuration
+retry:
+  max_attempts: 3
+  backoff_delays: [1, 2, 4]  # seconds
+  backoff_multiplier: 2.0
+
+# Request queue configuration
+queue:
+  max_size: 100
+  priorities:
+    critical: 0
+    high: 1
+    normal: 2
+    low: 3
+
+# Health check configuration
+health_check:
+  enabled: true
+  interval: 30  # seconds
+  timeout: 5
+  failure_threshold: 3
+
+# Connection pool configuration
+connection:
+  pool_size: 5
+  max_retries: 3
+  keepalive: true
