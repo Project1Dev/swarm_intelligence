@@ -11,6 +11,7 @@ from agents.leader import LeaderAgent, Plan, Subtask, SubtaskType, SubtaskStatus
 from agents.specialists import CodeSpecialist, LogicChecker, RetrievalSpecialist
 from blackboard.blackboard import Blackboard, SectionConfig
 from communication.message import Message, MessageType, Priority, MessageRouter
+from swarm.state_analyzer import StateAnalyzer, StateVector, AgentRecommendation
 from utils.maze_generator import Maze
 from experiments.baseline_algorithms import PathfindingResult
 
@@ -114,6 +115,7 @@ class SwarmOrchestrator:
         # Initialize shared components
         self.blackboard = Blackboard()
         self.router = MessageRouter()
+        self.state_analyzer = StateAnalyzer()
 
         # Initialize agents
         self.agents: Dict[AgentRole, BaseAgent] = {}
@@ -128,7 +130,7 @@ class SwarmOrchestrator:
         # Metrics
         self.agent_contributions: Dict[str, int] = {}
 
-        logger.info("SwarmOrchestrator initialized")
+        logger.info("SwarmOrchestrator initialized with StateAnalyzer")
 
     def initialize_agents(self, agent_configs: Optional[Dict[str, AgentConfig]] = None):
         """
@@ -384,16 +386,33 @@ class SwarmOrchestrator:
         subtask.status = SubtaskStatus.IN_PROGRESS
         plan.updated_at = time.time()
 
-        # Select agent for subtask
-        agent_role = self.leader.select_agent(
+        # Analyze current state
+        state_vector = self.state_analyzer.analyze_blackboard(
+            self.blackboard, self.current_round, self.start_time
+        )
+
+        # Get leader's default recommendation
+        default_agent_role = self.leader.select_agent(
             subtask, self.blackboard.read("facts", "orchestrator") or {}
         )
+
+        # Use state analyzer for dynamic selection
+        recommendation = self.state_analyzer.recommend_agent(
+            subtask.type.value, state_vector, default_agent_role
+        )
+
+        agent_role = recommendation.agent_role
         agent = self.agents.get(agent_role)
 
         if agent is None:
             logger.error(f"No agent found for role {agent_role}")
             subtask.status = SubtaskStatus.FAILED
             return False
+
+        logger.info(
+            f"Selected {agent_role.value} (confidence: {recommendation.confidence:.2f}) - "
+            f"{recommendation.reasoning}"
+        )
 
         # Build task and context
         task, context = self._build_task_context(subtask, maze)
@@ -414,6 +433,11 @@ class SwarmOrchestrator:
                 subtask.status = SubtaskStatus.COMPLETED
                 subtask.result = result.content if isinstance(result, Message) else result
 
+                # Record success for learning
+                self.state_analyzer.record_task_outcome(
+                    agent_role, subtask.type.value, True
+                )
+
                 logger.info(
                     f"Subtask {subtask.id} completed by {agent.name} in {elapsed:.2f}s"
                 )
@@ -421,6 +445,12 @@ class SwarmOrchestrator:
             else:
                 subtask.status = SubtaskStatus.FAILED
                 subtask.retry_count += 1
+
+                # Record failure for learning
+                self.state_analyzer.record_task_outcome(
+                    agent_role, subtask.type.value, False
+                )
+
                 logger.warning(f"Subtask {subtask.id} returned None")
                 return False
 
@@ -428,6 +458,12 @@ class SwarmOrchestrator:
             logger.error(f"Subtask {subtask.id} failed: {e}")
             subtask.status = SubtaskStatus.FAILED
             subtask.retry_count += 1
+
+            # Record failure for learning
+            self.state_analyzer.record_task_outcome(
+                agent_role, subtask.type.value, False
+            )
+
             return False
 
     def _build_task_context(
@@ -624,6 +660,9 @@ class SwarmOrchestrator:
 
         # Clear blackboard
         self.blackboard.clear()
+
+        # Reset state analyzer
+        self.state_analyzer.reset()
 
         # Reset contributions
         for name in self.agent_contributions:

@@ -545,6 +545,74 @@ Provide optimized code with explanation of changes."""
             complexity_space="Improved",
         )
 
+    def generate_multiple_strategies(
+        self, maze_info: Dict[str, Any], count: int = 3
+    ) -> List[CodeGenerationResult]:
+        """
+        Generate multiple algorithm strategies for comparison.
+
+        Args:
+            maze_info: Maze properties for strategy selection
+            count: Number of strategies to generate
+
+        Returns:
+            List of CodeGenerationResults
+        """
+        strategies = []
+
+        # Always include the standard algorithms
+        algorithms = ["BFS", "A*", "DFS"][:count]
+
+        for algorithm in algorithms:
+            result = self.generate_algorithm(algorithm, maze_info)
+            if result.success:
+                strategies.append(result)
+
+        logger.info(f"Generated {len(strategies)} strategies")
+        return strategies
+
+    def select_best_strategy(
+        self, strategies: List[CodeGenerationResult], maze_properties: Dict[str, Any]
+    ) -> CodeGenerationResult:
+        """
+        Select the best strategy from multiple options.
+
+        Args:
+            strategies: List of generated strategies
+            maze_properties: Maze properties for scoring
+
+        Returns:
+            Best strategy
+        """
+        from swarm.state_analyzer import StrategyComparator
+
+        if not strategies:
+            # Fallback to BFS
+            return self.generate_algorithm("BFS")
+
+        # Convert to format expected by comparator
+        strategy_dicts = []
+        for result in strategies:
+            strategy_dicts.append({
+                "algorithm": result.algorithm,
+                "code": result.code,
+                "confidence": 0.8 if result.success else 0.3,
+                "explanation": result.explanation,
+            })
+
+        best_dict = StrategyComparator.compare_algorithms(
+            strategy_dicts, maze_properties
+        )
+
+        # Find matching result
+        for result in strategies:
+            if result.algorithm == best_dict.get("algorithm"):
+                logger.info(f"Selected {result.algorithm} as best strategy")
+                return result
+
+        # Fallback to first strategy
+        return strategies[0]
+
     def process_task(self, task: Any, context: Dict[str, Any]) -> Optional[Message]:
         """Process a task assigned to code specialist."""
         task_type = task.get("type") if isinstance(task, dict) else str(task)
